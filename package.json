@@ -1,6 +1,7 @@
 {
-  "name": "template-app-53",
+  "name": "aria-ai-assistant",
   "version": "1.0.0",
+  "description": "ARIA - Advanced Reasoning Intelligence Assistant with native iOS integration",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
