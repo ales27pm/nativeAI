@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run ESLint
+        run: yarn lint
+
+      - name: TypeScript check
+        run: yarn typescript
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run tests
+        run: yarn test --coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build library
+        run: yarn prepare
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: lib
+          path: lib/
+
+  ios-build:
+    name: iOS Build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.0'
+          bundler-cache: true
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install iOS dependencies
+        run: |
+          cd example/ios
+          pod install
+
+      - name: Build iOS
+        run: |
+          cd example
+          npx react-native build-ios --mode Debug
+
+  validate-turbo-module:
+    name: Validate Turbo Module
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Validate Codegen
+        run: |
+          # Check if TypeScript spec exists
+          if [ ! -f "src/NativeDeviceInfo.ts" ]; then
+            echo "❌ TypeScript spec not found"
+            exit 1
+          fi
+          echo "✅ TypeScript spec found"
+
+          # Check if iOS implementation exists
+          if [ ! -f "ios/RCTNativeDeviceInfo.mm" ]; then
+            echo "❌ iOS implementation not found"
+            exit 1
+          fi
+          echo "✅ iOS implementation found"
+
+          # Check if Swift implementation exists
+          if [ ! -f "ios/RCTNativeDeviceInfoImpl.swift" ]; then
+            echo "❌ Swift implementation not found"
+            exit 1
+          fi
+          echo "✅ Swift implementation found"
+
+          # Validate podspec
+          if [ ! -f "NativeDeviceInfo.podspec" ]; then
+            echo "❌ Podspec not found"
+            exit 1
+          fi
+          echo "✅ Podspec found"
+
+          # Check codegen config
+          if ! grep -q "codegenConfig" package.json; then
+            echo "❌ Codegen config not found in package.json"
+            exit 1
+          fi
+          echo "✅ Codegen config found"
+
+      - name: Validate iOS Compilation
+        run: |
+          # Create a temporary iOS project to test compilation
+          mkdir -p temp_ios_test
+          cd temp_ios_test
+          
+          # Copy Turbo Module files
+          cp -r ../ios ./
+          cp ../NativeDeviceInfo.podspec ./
+          
+          # Create minimal Podfile
+          cat > Podfile << EOF
+          platform :ios, '11.0'
+          target 'TempTest' do
+            pod 'NativeDeviceInfo', :path => './'
+          end
+          EOF
+          
+          # Test pod spec validation
+          pod lib lint NativeDeviceInfo.podspec --allow-warnings
+          
+          echo "✅ iOS compilation validation passed"
+
+  publish-npm:
+    name: Publish to NPM
+    runs-on: ubuntu-latest
+    needs: [lint, test, build, ios-build, validate-turbo-module]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build library
+        run: yarn prepare
+
+      - name: Publish to NPM
+        run: |
+          # Check if version has been updated
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED_VERSION=$(npm view react-native-device-info-turbo version 2>/dev/null || echo "0.0.0")
+          
+          if [ "$CURRENT_VERSION" != "$PUBLISHED_VERSION" ]; then
+            echo "Publishing version $CURRENT_VERSION (was $PUBLISHED_VERSION)"
+            npm publish
+          else
+            echo "Version $CURRENT_VERSION already published, skipping"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [publish-npm]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          release_name: Release v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Changes in v${{ steps.version.outputs.VERSION }}
+            
+            ### 🚀 Features
+            - Advanced device information Turbo Module
+            - Native iOS integration with Swift
+            - Biometric authentication support
+            - Location services integration
+            - Battery and storage monitoring
+            - Haptic feedback support
+            - Network state detection
+            
+            ### 📱 iOS Features
+            - Face ID / Touch ID authentication
+            - Core Location integration
+            - System information access
+            - Native UI components
+            - Background location updates
+            
+            ### 🛠️ Technical
+            - React Native New Architecture support
+            - Turbo Modules implementation
+            - TypeScript definitions
+            - CocoaPods integration
+            - Comprehensive error handling
+            
+            See the [README](https://github.com/${{ github.repository }}/blob/main/README.md) for usage instructions.
+          draft: false
+          prerelease: false

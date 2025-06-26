@@ -1,0 +1,99 @@
+{
+  "name": "react-native-device-info-turbo",
+  "version": "1.0.0",
+  "description": "Advanced device information Turbo Module for React Native with native iOS integration",
+  "main": "lib/commonjs/index.js",
+  "module": "lib/module/index.js",
+  "types": "lib/typescript/index.d.ts",
+  "react-native": "src/index.ts",
+  "source": "src/index.ts",
+  "files": [
+    "src",
+    "lib",
+    "ios",
+    "android",
+    "NativeDeviceInfo.podspec",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__"
+  ],
+  "scripts": {
+    "test": "jest",
+    "typescript": "tsc --noEmit",
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "prepare": "bob build",
+    "release": "release-it",
+    "bootstrap": "yarn install && cd example && yarn install && cd ios && pod install"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "turbo-module",
+    "device-info",
+    "biometric",
+    "location",
+    "battery",
+    "storage",
+    "native"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/react-native-device-info-turbo.git"
+  },
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yourusername/react-native-device-info-turbo/issues"
+  },
+  "homepage": "https://github.com/yourusername/react-native-device-info-turbo#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@react-native-community/eslint-config": "^3.0.0",
+    "@types/jest": "^28.1.2",
+    "@types/react": "~18.0.14",
+    "@types/react-native": "0.70.0",
+    "eslint": "^8.4.1",
+    "jest": "^28.1.1",
+    "pod-install": "^0.1.0",
+    "react": "18.2.0",
+    "react-native": "0.70.0",
+    "react-native-builder-bob": "^0.20.0",
+    "release-it": "^15.0.0",
+    "typescript": "^4.5.2"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "jest": {
+    "preset": "react-native",
+    "modulePathIgnorePatterns": [
+      "<rootDir>/example/node_modules",
+      "<rootDir>/lib/"
+    ]
+  },
+  "codegenConfig": {
+    "name": "NativeDeviceInfoSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.deviceinfoturbo"
+    }
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module",
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  }
+}
